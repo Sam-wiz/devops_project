@@ -1,0 +1,39 @@
+{
+  "name": "devops-proj",
+  "version": "1.0.0",
+  "description": "Resilient microservices architecture with circuit breaker pattern",
+  "private": true,
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm install --workspaces",
+    "build:all": "npm run build --workspaces",
+    "build:control-plane": "npm run build --workspace=services/control-plane",
+    "build:job-api": "npm run build --workspace=services/job-api",
+    "build:worker": "npm run build --workspace=services/worker",
+    "start:all": "concurrently -n control-plane,job-api,worker \"npm run start:control-plane\" \"npm run start:job-api\" \"npm run start:worker\"",
+    "start:dev:all": "concurrently -n control-plane,job-api,worker \"npm run start:dev:control-plane\" \"npm run start:dev:job-api\" \"npm run start:dev:worker\"",
+    "start:control-plane": "npm run start --workspace=services/control-plane",
+    "start:job-api": "npm run start --workspace=services/job-api",
+    "start:worker": "npm run start --workspace=services/worker",
+    "start:dev:control-plane": "npm run start:dev --workspace=services/control-plane",
+    "start:dev:job-api": "npm run start:dev --workspace=services/job-api",
+    "start:dev:worker": "npm run start:dev --workspace=services/worker",
+    "lint:all": "npm run lint --workspaces",
+    "lint:fix:all": "npm run lint:fix --workspaces",
+    "test:all": "npm run test --workspaces",
+    "test:cov:all": "npm run test:cov --workspaces",
+    "clean": "npm run clean --workspaces --if-present && rm -rf node_modules",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
