@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-api
+  labels:
+    app: job-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: job-api
+  template:
+    metadata:
+      labels:
+        app: job-api
+    spec:
+      containers:
+      - name: job-api
+        image: YOUR_DOCKERHUB_USERNAME/job-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: RABBITMQ_URL
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: RABBITMQ_URL
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: job-api
+spec:
+  selector:
+    app: job-api
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+  type: LoadBalancer

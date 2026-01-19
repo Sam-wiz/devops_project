@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels:
+    app: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: YOUR_DOCKERHUB_USERNAME/worker:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3001
+          name: http
+        env:
+        - name: PORT
+          value: "3001"
+        - name: RABBITMQ_URL
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: RABBITMQ_URL
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: REDIS_URL
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+spec:
+  selector:
+    app: worker
+  ports:
+  - name: http
+    port: 3001
+    targetPort: 3001
+  type: ClusterIP
