@@ -4,7 +4,7 @@
 
 **Student Name:** Samrudh
 **Scaler Student ID:** BCS10123
-**GitHub Repository:** https://github.com/Sam-wiz/devops_proj
+**GitHub Repository:** https://github.com/Sam-wiz/devops_project
 **Submission Date:** January 20, 2026
 
 ---
@@ -606,6 +606,6 @@ The system is ready for deployment to production Kubernetes clusters with proper
 
 **Report End**
 
-**Submitted by:** [Your Name]
+**Submitted by:** Samrudh
 **Date:** January 20, 2026
-**Project URL:** https://github.com/Sam-wiz/devops_proj
+**Project URL:** https://github.com/Sam-wiz/devops_project
