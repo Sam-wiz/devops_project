@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WorkerService } from './worker.service';
 import { CircuitBreakerService, CircuitState } from '../circuit-breaker/circuit-breaker.service';
+import { EmailService } from '../email/email.service';
 
 describe('WorkerService', () => {
   let service: WorkerService;
   let mockCircuitBreaker: any;
+  let mockEmailService: any;
 
   beforeEach(async () => {
     mockCircuitBreaker = {
@@ -16,12 +18,20 @@ describe('WorkerService', () => {
       canProbe: jest.fn().mockResolvedValue(false),
     };
 
+    mockEmailService = {
+      sendCircuitOpenAlert: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkerService,
         {
           provide: CircuitBreakerService,
           useValue: mockCircuitBreaker,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
         },
       ],
     }).compile();
