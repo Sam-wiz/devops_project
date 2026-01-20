@@ -91,13 +91,17 @@ jobs:
       - name: Deploy Redis
         run: |
           kubectl apply -f k8s/redis.yaml
-          echo "Waiting for Redis..."
-          kubectl wait --for=condition=ready pod -l app=redis --timeout=120s
+          echo "Waiting for Redis deployment..."
+          kubectl rollout status deployment/redis --timeout=180s
+          echo "Waiting for Redis pod to be ready..."
+          kubectl wait --for=condition=ready pod -l app=redis --timeout=60s
       - name: Deploy RabbitMQ
         run: |
           kubectl apply -f k8s/rabbitmq.yaml
-          echo "Waiting for RabbitMQ..."
-          kubectl wait --for=condition=ready pod -l app=rabbitmq --timeout=120s
+          echo "Waiting for RabbitMQ deployment..."
+          kubectl rollout status deployment/rabbitmq --timeout=180s
+          echo "Waiting for RabbitMQ pod to be ready..."
+          kubectl wait --for=condition=ready pod -l app=rabbitmq --timeout=60s
       - name: Deploy Job API
         run: |
           kubectl apply -f k8s/job-api.yaml
