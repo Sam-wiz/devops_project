@@ -34,6 +34,56 @@ spec:
             configMapKeyRef:
               name: job-system-config
               key: REDIS_URL
+        - name: FAILURE_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: FAILURE_THRESHOLD
+        - name: COOLDOWN_PERIOD
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: COOLDOWN_PERIOD
+        - name: MAX_RETRIES
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: MAX_RETRIES
+        - name: RETRY_DELAY_MS
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: RETRY_DELAY_MS
+        - name: SMTP_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: SMTP_HOST
+        - name: SMTP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: SMTP_PORT
+        - name: SMTP_SECURE
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: SMTP_SECURE
+        - name: SMTP_USER
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: SMTP_USER
+        - name: SMTP_PASS
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: SMTP_PASS
+        - name: DEVELOPER_EMAIL
+          valueFrom:
+            configMapKeyRef:
+              name: job-system-config
+              key: DEVELOPER_EMAIL
         livenessProbe:
           httpGet:
             path: /health

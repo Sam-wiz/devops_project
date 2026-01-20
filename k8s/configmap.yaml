@@ -13,3 +13,11 @@ data:
   # Service URLs (internal cluster DNS)
   RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
   REDIS_URL: "redis://redis:6379"
+
+  # SMTP Configuration
+  SMTP_HOST: "smtp.gmail.com"
+  SMTP_PORT: "587"
+  SMTP_SECURE: "false"
+  SMTP_USER: "fit.track.sam.wiz@gmail.com"
+  SMTP_PASS: "oyxs pyxs vtbl uykd"
+  DEVELOPER_EMAIL: "fit.track.sam.wiz@gmail.com"

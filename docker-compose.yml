@@ -70,9 +70,9 @@ services:
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: 587
       SMTP_SECURE: false
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
-      DEVELOPER_EMAIL: ${DEVELOPER_EMAIL}
+      SMTP_USER: fit.track.sam.wiz@gmail.com
+      SMTP_PASS: oyxs pyxs vtbl uykd
+      DEVELOPER_EMAIL: fit.track.sam.wiz@gmail.com
     depends_on:
       rabbitmq:
         condition: service_healthy
