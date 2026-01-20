@@ -1,0 +1,237 @@
+name: CD - Deploy to Kubernetes
+
+on:
+  workflow_run:
+    workflows: ["CI - Job API", "CI - Worker", "CI - Control Plane"]
+    branches: [master, main]
+    types:
+      - completed
+  workflow_dispatch:
+
+env:
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    env:
+      HAS_KUBECONFIG: ${{ secrets.KUBECONFIG != '' }}
+      HAS_DOCKER_CREDS: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubectl for production cluster
+        if: env.HAS_KUBECONFIG == 'true'
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          kubectl config current-context
+          echo "Using production Kubernetes cluster"
+
+      - name: Create kind cluster (demo mode)
+        if: env.HAS_KUBECONFIG == 'false'
+        uses: helm/kind-action@v1.8.0
+        with:
+          cluster_name: devops-demo
+          wait: 120s
+
+      - name: Verify cluster
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+          echo "Cluster ready for deployment"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to DockerHub
+        if: env.HAS_KUBECONFIG == 'true' && env.HAS_DOCKER_CREDS == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push images to DockerHub
+        if: env.HAS_KUBECONFIG == 'true'
+        run: |
+          echo "Building and pushing images for production cluster..."
+          docker build -t ${{ env.DOCKERHUB_USERNAME }}/job-api:latest -t ${{ env.DOCKERHUB_USERNAME }}/job-api:${{ github.sha }} services/job-api
+          docker build -t ${{ env.DOCKERHUB_USERNAME }}/worker:latest -t ${{ env.DOCKERHUB_USERNAME }}/worker:${{ github.sha }} services/worker
+          docker build -t ${{ env.DOCKERHUB_USERNAME }}/control-plane:latest -t ${{ env.DOCKERHUB_USERNAME }}/control-plane:${{ github.sha }} services/control-plane
+
+          docker push ${{ env.DOCKERHUB_USERNAME }}/job-api:latest
+          docker push ${{ env.DOCKERHUB_USERNAME }}/job-api:${{ github.sha }}
+          docker push ${{ env.DOCKERHUB_USERNAME }}/worker:latest
+          docker push ${{ env.DOCKERHUB_USERNAME }}/worker:${{ github.sha }}
+          docker push ${{ env.DOCKERHUB_USERNAME }}/control-plane:latest
+          docker push ${{ env.DOCKERHUB_USERNAME }}/control-plane:${{ github.sha }}
+      - name: Build and load images to kind
+        if: env.HAS_KUBECONFIG == 'false'
+        run: |
+          echo "Building images for kind cluster..."
+          docker build -t ${{ env.DOCKERHUB_USERNAME }}/job-api:latest services/job-api
+          docker build -t ${{ env.DOCKERHUB_USERNAME }}/worker:latest services/worker
+          docker build -t ${{ env.DOCKERHUB_USERNAME }}/control-plane:latest services/control-plane
+
+          kind load docker-image ${{ env.DOCKERHUB_USERNAME }}/job-api:latest --name devops-demo
+          kind load docker-image ${{ env.DOCKERHUB_USERNAME }}/worker:latest --name devops-demo
+          kind load docker-image ${{ env.DOCKERHUB_USERNAME }}/control-plane:latest --name devops-demo
+      - name: Apply ConfigMap
+        run: kubectl apply -f k8s/configmap.yaml
+      - name: Update image references
+        run: |
+          sed -i "s|YOUR_DOCKERHUB_USERNAME|${{ env.DOCKERHUB_USERNAME }}|g" k8s/job-api.yaml
+          sed -i "s|YOUR_DOCKERHUB_USERNAME|${{ env.DOCKERHUB_USERNAME }}|g" k8s/worker.yaml
+          sed -i "s|YOUR_DOCKERHUB_USERNAME|${{ env.DOCKERHUB_USERNAME }}|g" k8s/control-plane.yaml
+      - name: Deploy Redis
+        run: |
+          kubectl apply -f k8s/redis.yaml
+          echo "Waiting for Redis..."
+          kubectl wait --for=condition=ready pod -l app=redis --timeout=120s
+      - name: Deploy RabbitMQ
+        run: |
+          kubectl apply -f k8s/rabbitmq.yaml
+          echo "Waiting for RabbitMQ..."
+          kubectl wait --for=condition=ready pod -l app=rabbitmq --timeout=120s
+      - name: Deploy Job API
+        run: |
+          kubectl apply -f k8s/job-api.yaml
+          echo "Waiting for Job API..."
+          kubectl rollout status deployment/job-api --timeout=180s
+      - name: Deploy Worker
+        run: |
+          kubectl apply -f k8s/worker.yaml
+          echo "Waiting for Worker..."
+          kubectl rollout status deployment/worker --timeout=180s
+      - name: Deploy Control Plane
+        run: |
+          kubectl apply -f k8s/control-plane.yaml
+          echo "Waiting for Control Plane..."
+          kubectl rollout status deployment/control-plane --timeout=180s
+      - name: Verify deployment
+        run: |
+          echo "=== Pod Status ==="
+          kubectl get pods
+
+          echo -e "\n=== Services ==="
+          kubectl get services
+
+          echo -e "\n=== Deployments ==="
+          kubectl get deployments
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+
+          # Port forward Job API
+          kubectl port-forward svc/job-api 3000:3000 &
+          PF_PID_1=$!
+          sleep 5
+
+          # Test 1: Health check
+          echo "Test 1: Job API health check"
+          curl -f http://localhost:3000/health || exit 1
+
+          # Test 2: Submit a test job
+          echo "Test 2: Submit a job"
+          curl -X POST http://localhost:3000/jobs \
+            -H "Content-Type: application/json" \
+            -d '{
+              "jobType": "email",
+              "payload": {
+                "to": "test@example.com",
+                "subject": "CD Pipeline Test"
+              }
+            }' || exit 1
+
+          # Kill port-forward with specific PID
+          kill $PF_PID_1 || true
+
+          # Port forward Control Plane
+          kubectl port-forward svc/control-plane 3002:3002 &
+          PF_PID_2=$!
+          sleep 5
+
+          # Test 3: Control plane health
+          echo "Test 3: Control plane health check"
+          curl -f http://localhost:3002/health || exit 1
+
+          # Kill port-forward with specific PID
+          kill $PF_PID_2 || true
+
+          echo "Smoke tests passed!"
+      - name: DAST - OWASP ZAP Baseline Scan
+        run: |
+          echo "Running DAST with OWASP ZAP..."
+          
+          # Port forward Job API for DAST
+          kubectl port-forward svc/job-api 3000:3000 &
+          PF_PID=$!
+          sleep 5
+          
+          # Run OWASP ZAP baseline scan
+          docker run --rm --network host \
+            -v $(pwd):/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://localhost:3000 \
+            -r zap-report.html \
+            -w zap-report.md \
+            -I || echo "DAST completed with warnings (expected for baseline)"
+          
+          # Kill port-forward with specific PID
+          kill $PF_PID || true
+          
+          echo "DAST scan complete. Check zap-report for details."
+
+      - name: Upload DAST Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-report
+          path: |
+            zap-report.html
+            zap-report.md
+          retention-days: 30
+      - name: Login to DockerHub
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Push images to DockerHub
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          docker push ${{ env.DOCKERHUB_USERNAME }}/job-api:latest || echo "DockerHub push skipped"
+          docker push ${{ env.DOCKERHUB_USERNAME }}/worker:latest || echo "DockerHub push skipped"
+          docker push ${{ env.DOCKERHUB_USERNAME }}/control-plane:latest || echo "DockerHub push skipped"
+        continue-on-error: true
+      - name: Display deployment summary
+        run: |
+          echo "=========================================="
+          echo "  Deployment Complete to kind cluster"
+          echo "=========================================="
+          echo ""
+          echo "All services deployed successfully:"
+          kubectl get all
+          echo ""
+          echo "Security: DAST scan completed"
+          echo "Note: This is a demo deployment using kind cluster in GitHub Actions"
+          echo "For production, configure KUBECONFIG secret with your cluster credentials"
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Pod Status ==="
+          kubectl get pods
+          echo -e "\n=== Pod Descriptions ==="
+          kubectl describe pods
+          echo -e "\n=== Pod Logs ==="
+          kubectl logs -l app=job-api --tail=50 || true
+          kubectl logs -l app=worker --tail=50 || true
+          kubectl logs -l app=control-plane --tail=50 || true
